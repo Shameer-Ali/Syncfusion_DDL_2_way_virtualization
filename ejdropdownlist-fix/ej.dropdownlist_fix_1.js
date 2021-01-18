@@ -2028,7 +2028,7 @@
                         }
                     }
                     else if (ej.DataManager && source instanceof ej.DataManager && source.dataSource.offline && (source.dataSource.json && source.dataSource.json.length > 0)) { 
-                        if ((ej.isNullOrUndefined(this.inputSearch)||this.inputSearch.val() == "") && this.popupListItems[this.popupListItems.length -1].value != source.dataSource.json[source.dataSource.json.length-1].value) {
+                        if ((ej.isNullOrUndefined(this.inputSearch)||this.inputSearch.val() == "") && parseInt(this.ultag.find("li")[this.ultag.find("li").length-1].getAttribute("data-index-id")) != source.dataSource.json.length) {
                         proxy._ddldownScroll = false;
                         proxy.addItem(proxy._localDataVirtualScroll());
                                 window.setTimeout(function () {

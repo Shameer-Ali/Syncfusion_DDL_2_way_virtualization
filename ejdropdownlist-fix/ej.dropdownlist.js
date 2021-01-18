@@ -2033,6 +2033,7 @@
                         proxy.addItem(proxy._localDataVirtualScroll());
                                 window.setTimeout(function () {
                                 proxy._removeLoadingClass();
+                                if (ej.isNullOrUndefined(this._dataFIndex)) proxy.activeItem[0].scrollIntoView();
                             }, 100);
                         } else{
                             proxy._removeLoadingClass();    
@@ -2108,7 +2109,6 @@
             var source = this._dataSource();
             var top = this.scrollerObj.scrollTop(), proxy = this, prevIndex = 0, prevPageLoad, nextIndex = null;
             this._currentPage = Math.round(top / (29 * this.model.itemsCount));
-			var defaultList = ej.DataManager(source.dataSource.json).executeLocal(ej.Query().take(this.model.itemsCount));
 			if(this._virtualPages){
             if (($.inArray(this._currentPage, this._virtualPages.sort(function (a, b) { return a - b; }))) != -1) {
                 if (this._currentPage == 0) {

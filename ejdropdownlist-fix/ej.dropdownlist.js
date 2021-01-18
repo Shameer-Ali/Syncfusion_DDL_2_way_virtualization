@@ -389,7 +389,7 @@
                 this._setWatermark();
         },
 
-        addItem: function (itemTag) {
+        _addItems: function(itemTag, checkAppend){
             if(this.model.loadOnDemand && (ej.isNullOrUndefined(this.ultag) || this.ultag.children().length==0)) this._showFullList();
             if (!this.model.enabled || !itemTag) return false;
             this._mapFields();
@@ -406,8 +406,7 @@
             mapFld._htmlAttributes = list[0][mapper._htmlAttributes] ? mapper._htmlAttributes : "htmlAttributes";
             mapFld._selected = list[0][mapper._selected] ? mapper._selected : "selected";
             mapFld._category = list[0][mapper._category] ? mapper._category : "groupBy";
-            this._generateLi(list, mapFld);
-            
+            this._generateLi(list, mapFld, checkAppend);
             var i, listItems = this.dummyUl;
             for (var i = 0; i < list.length; i++)
                 this._listItem(list[i], "add");
@@ -415,13 +414,26 @@
                 this._appendCheckbox(listItems, true);               
             }
             else if (!this._isSingleSelect()) this._multiItemSelection(listItems, true);
-			this._virtualUl.append($(this.dummyUl).clone(true));
-            this.ultag.append(this.dummyUl);
+            this._virtualUl.append($(this.dummyUl).clone(true));
+        },
 
-            if (this._isPopupShown()) {
+        addItem: function (itemTag) {
+                this._addItems(itemTag, true);            
+                this.ultag.append(this.dummyUl);
+           if (this._isPopupShown()) {
                 var scrollerPosition = this.scrollerObj ? this.scrollerObj.scrollTop() : 0;
                 this._refreshScroller();
+                this._ddldownScroll = true;
                 if (this.scrollerObj) this.scrollerObj.option("scrollTop", scrollerPosition);
+            }
+        },
+
+        _negativeaddItem: function (itemTag) {
+                this._addItems(itemTag, false);
+                this.ultag.prepend(this.dummyUl);
+            if (this._isPopupShown()) {
+                this._refreshScroller();
+                if (this.scrollerObj) this.scrollerObj.scrollY(this.model.itemsCount * 29);
             }
         },
 
@@ -454,8 +466,16 @@
             this._selectItemByIndex(index);
         },
 
+        _updateDdlList: function(val){
+                this.ultag.children().remove();
+                this._showFullList();
+        },
+
         _selectItemByIndex: function (val) {
-            if(this.model.loadOnDemand && (ej.isNullOrUndefined(this.ultag) || this.ultag.children().length==0)) this._showFullList();
+            if(this.model.virtualScrollMode =='continuous' && this.model.itemsCount <= val) {
+            this._updateDdlList(val);
+            }
+             if(this.model.loadOnDemand && (ej.isNullOrUndefined(this.ultag) || this.ultag.children().length==0)) this._showFullList();
             this.listitems = this._getLi();
             this._selectedIndices = $.map(this._selectedIndices, function (a) { return parseInt(a); });
             this.model.selectedItems = this.model.selectedIndices = this._selectedIndices;
@@ -469,21 +489,32 @@
                 index = parseInt(items[k]);
                 if (index != null && index >= 0) {
                     if ($.inArray(index, this._selectedIndices) == -1)
-                        for (var i = 0; i < this.listitems.length; i++) {
-                            if (!$(this.listitems[i]).hasClass('e-disable')) {
-                                if (i == index) {
-                                    this.selectedIndexValue = i;
-                                    this._activeItem = index;
-                                    this._enterTextBoxValue();
-                                }
-                            }
+                    if(this.model.virtualScrollMode =='continuous' && this.model.itemsCount < val) {
+                        for (var i = this._dataFIndex, j=0; i < this._dataLIndex; i++) {
+                            this._enterSelectedIndex(j, i, index);
+                            j++;
                         }
-                } else if (!this.model.showCheckbox && this.model.multiSelectMode == "none" && this.model.selectedItems.length > 0) {
+                    } else {
+                        for (var i=0,j = 0; i < this.listitems.length; i++,j++) {
+                            this._enterSelectedIndex(i,j,index);
+                        }
+                }
+             } else if (!this.model.showCheckbox && this.model.multiSelectMode == "none" && this.model.selectedItems.length > 0) {
 					this._clearTextboxValue();
 				   this._trigger("change",{ text: this._visibleInput[0].value, selectedText: "", selectedValue: "", value: "" });
 				} 
             }
 			}
+        },
+
+        _enterSelectedIndex: function(item, dataIndex, index){
+            if (!$(this.listitems[item]).hasClass('e-disable')) {
+                if (dataIndex == index) {
+                    this.selectedIndexValue = dataIndex;
+                    this._activeItem = index;
+                    this._enterTextBoxValue();
+                }
+            }
         },
 
         unselectItemsByIndices: function (val) { this._unselectItemByIndex(val); },
@@ -1028,8 +1059,9 @@
                         /* will depreciate with selectedIndex  Method*/
                     case "selectedItemIndex":
                     case "selectedIndex":
-                        this._selectItemByIndex(options[option]);
-                        this.model.selectedItemIndex = this.model.selectedIndex = options[option];
+                    this.clearText();
+                    this.model.selectedItemIndex = this.model.selectedIndex = options[option];    
+                    this._selectItemByIndex(options[option]);
                         break;
                         /* will depreciate with unselectItemByIndex API Method*/
                     case "unselectItemByIndex": this._unselectItemByIndex(options[option]); break;
@@ -1040,8 +1072,18 @@
                         /* will depreciate with selectedIndices  Method*/
                     case "selectedItems":
                     case "selectedIndices":
-                        this._selectCheckedItem(options[option]);
-                        options[option] = this.model.selectedItems = this.model.selectedIndices = this._selectedIndices;
+                    var _lengthVal,_copyVal;
+                    _lengthVal=_copyVal=this.model.selectedIndices.slice();
+                    for (var k = 0; k < options[option].length; k++) {
+                            if ($.inArray(options[option][k],_lengthVal) == -1){
+                                _copyVal.push(options[option][k]);
+                            }
+                    }
+                    this.clearText();
+                    this.model.selectedItems = this.model.selectedIndices = this._selectedIndices = _copyVal;
+                    var _sortedDdlList = this.model.selectedIndices.slice().sort(function (a, b) { return a - b; });
+                    this._updateDdlList(_sortedDdlList[_sortedDdlList.length-1]);
+                    this._selectCheckedItem(this.model.selectedIndices);
                         break;
                     case "multiSelectMode":
                         if (this.model.multiSelectMode == "visualmode") {
@@ -1090,6 +1132,7 @@
                             break; 
                 }
             }
+            if(this._isPopupShown()) this._refreshPopup();
         },
 
         _clearTextboxValue: function () {
@@ -1344,7 +1387,7 @@
             }
         },
         _getQuery: function (isLocal) {
-            var remoteUrl, mapper = this.model.fields, queryManager = ej.Query();
+            var remoteUrl, mapper = this.model.fields, queryManager = ej.Query(), midRange;
             if (ej.isNullOrUndefined(this.model.query) && !this.model.template && !isLocal) {
                 var column = [];
                 for (var col in mapper) {
@@ -1355,10 +1398,24 @@
                     queryManager.select(column);
             }
             else if (this.model.query) queryManager = this.model.query.clone();
-
             if (this.model.allowVirtualScrolling) queryManager.requiresCount();
-            if (this.model.itemsCount > 0) queryManager.take(this.model.itemsCount);
-
+            if(this.model.selectedIndices.length!=0) var sortedIndices = this.model.selectedIndices.slice().sort(function (a, b) { return a - b; });
+            if (this.model.itemsCount > 0) {
+                if ((this.model.selectedIndices.length==0 || sortedIndices[sortedIndices.length -1]<this.model.itemsCount) && (this.model.selectedIndex == -1 || this.model.selectedIndex < this.model.itemsCount)){
+                    queryManager.take(this.model.itemsCount);
+                    this._dataFIndex = this._dataLIndex = null;
+                } 
+			else if(this.model.allowVirtualScrolling=true && this.model.virtualScrollMode == "continuous" && this.model.selectedIndex != -1 && !ej.isNullOrUndefined(this.model.selectedIndex))
+			{
+                midRange = Math.round(this.model.itemsCount / 2);
+                 this._dataFIndex = this._dataLIndex = this.model.selectedIndex-midRange; 
+				queryManager.skip(this.model.selectedIndex+midRange - this.model.itemsCount).take(this.model.itemsCount);
+			} else if(this.model.allowVirtualScrolling=true && this.model.virtualScrollMode == "continuous") {
+                midRange = Math.round(this.model.itemsCount / 2);
+                 this._dataFIndex = this._dataLIndex = (sortedIndices[0] < midRange) ? sortedIndices[0]==0 ? 0 : sortedIndices[0]-1 : sortedIndices[0] - midRange;
+				queryManager.range(this._dataFIndex, sortedIndices[sortedIndices.length -1] + midRange).take(sortedIndices[sortedIndices.length -1] + midRange - this._dataFIndex);
+            }
+            } 
             remoteUrl = this._dataSource().dataSource;
             if (mapper)
                 if ((remoteUrl && remoteUrl.url && !remoteUrl.url.match(mapper.tableName + "$")) || (remoteUrl && !remoteUrl.url) || (!remoteUrl))
@@ -1462,7 +1519,6 @@
             if (oldWrapper)
                 $(oldWrapper).remove();
             this.popupPanelWrapper = ej.buildTag("div#" + this._id + "_popup_wrapper");
-            
             $('body').append(this.popupPanelWrapper);
             this.popupListWrapper = ej.buildTag("div.e-ddl-popup e-box e-widget  e-popup#" + this._id + "_popup_list_wrapper", "", { display: "none", overflow: "hidden" });
             this._setAttr(this.popupListWrapper[0], { "data-role":"popup", "aria-hidden": true });
@@ -1929,7 +1985,7 @@
                 for (var i = 0; i < groupedList.length; i++) {
                     if (groupedList[i].key)
                         this.ultag.append(ej.buildTag("li.e-category", groupedList[i].key).attr("role", "option")[0]);
-                    this._generateLi(groupedList[i].items, this.mapFld);
+                    this._generateLi(groupedList[i].items, this.mapFld, true);
                     this.ultag.append(this.dummyUl);
                     for (var j = 0; j < groupedList[i].items.length; j++) {
                         (from == "search") ? this.popupListItems.push(groupedList[i].items[j]) : this._listItem(groupedList[i].items[j], "add");
@@ -1937,18 +1993,17 @@
                 }
             }
             else {
-                this._generateLi(list, this.mapFld);
+                this._generateLi(list, this.mapFld, true);
                 this.ultag.append(this.dummyUl);//ko binding
             }
             this._trigger('dataBound', { data: list });
         },
         _onScroll: function (e) {
-            if (!e.scrollTop) return;
             var scrollerPositon = e.scrollTop, proxy = this;
             var source = this._dataSource();
             if (proxy.model.allowVirtualScrolling && proxy.model.virtualScrollMode == "continuous") {
                 var list, queryPromise, skipQuery = ej.Query().skip(proxy._rawList.length).take(proxy.model.itemsCount).clone();
-                if (scrollerPositon >= Math.round($(proxy.popupList).find("ul,ol").height() - $(proxy.popupList).height()) && proxy._rawList.length < proxy._totalCount) {
+                if (e.scrollTop && scrollerPositon >= Math.round($(proxy.popupList).find("ul,ol").height() - $(proxy.popupList).height()) && proxy._rawList.length < proxy._totalCount){
                     proxy._addLoadingClass();
                     if (ej.DataManager && proxy._dataSource() instanceof ej.DataManager && !ej.isNullOrUndefined(proxy._dataSource().dataSource.url)) {
                         if (proxy.inputSearch && proxy.inputSearch.val() != "" && this.model.enableServerFiltering) 
@@ -1972,19 +2027,34 @@
                             });
                         }
                     }
-                    else if (ej.DataManager && source instanceof ej.DataManager && source.dataSource.offline && (source.dataSource.json && source.dataSource.json.length > 0)) {
-                                proxy.addItem(this._localDataVirtualScroll());
+                    else if (ej.DataManager && source instanceof ej.DataManager && source.dataSource.offline && (source.dataSource.json && source.dataSource.json.length > 0)) { 
+                        if ((ej.isNullOrUndefined(this.inputSearch)||this.inputSearch.val() == "") && parseInt(this.ultag.find("li")[this.ultag.find("li").length-1].getAttribute("data-index-id")) != source.dataSource.json.length) {
+                        proxy._ddldownScroll = false;
+                        proxy.addItem(proxy._localDataVirtualScroll());
                                 window.setTimeout(function () {
                                 proxy._removeLoadingClass();
                             }, 100);
-                    }
+                        } else{
+                            proxy._removeLoadingClass();    
+                        }
+                        }
                     else {
                         list = ej.DataManager(proxy._dataSource()).executeLocal(skipQuery);
                         proxy.addItem(proxy._removeSelectedValue(list));
                         proxy._removeLoadingClass();
                     }
+                } else if((ej.isNullOrUndefined(this.inputSearch)||this.inputSearch.val() == "") && (ej.isNullOrUndefined(proxy._ddldownScroll) || proxy._ddldownScroll) && scrollerPositon == 0 && proxy._rawList.length < proxy._totalCount) {
+                     proxy._addLoadingClass();
+                     if (ej.DataManager && source instanceof ej.DataManager && source.dataSource.offline && (source.dataSource.json && source.dataSource.json.length > 0)) {
+                        if(!ej.isNullOrUndefined(proxy._dataFIndex) && proxy._dataFIndex != 0 && (ej.isNullOrUndefined(proxy._countEnd) || !proxy._countEnd)) {
+                        proxy._negativeaddItem(proxy._localNegDataVirtualScroll());
+                        }
+                         window.setTimeout(function () {
+                         proxy._removeLoadingClass();
+                    }, 100);
                 }
-            } else if (proxy.model.allowVirtualScrolling && proxy.model.virtualScrollMode == "normal") {
+            }
+            } else if (e.scrollTop && proxy.model.allowVirtualScrolling && proxy.model.virtualScrollMode == "normal") {
 
                 window.setTimeout(function () {
                     if (proxy._virtualCount == 0) {
@@ -1999,8 +2069,25 @@
             var proxy = this;
             var selectValue = (!ej.isNullOrUndefined(proxy.value())) ? (typeof(proxy.value()) == "number") ? 1 : proxy.value().split(proxy.model.delimiterChar).length : 0;
             var _rawlist = (proxy._checkValue) ? proxy._rawList.length - selectValue : proxy._rawList.length;
-            var queryPromise = ej.DataManager(proxy._dataSource().dataSource.json).executeLocal(ej.Query().skip(_rawlist).take(proxy.model.itemsCount).clone());
+            if(!ej.isNullOrUndefined(this._dataLIndex)) {
+                var queryPromise = ej.DataManager(proxy._dataSource().dataSource.json).executeLocal(ej.Query().skip(proxy._dataLIndex).take(proxy.model.itemsCount).clone());
+            } else{
+                var queryPromise = ej.DataManager(proxy._dataSource().dataSource.json).executeLocal(ej.Query().skip(_rawlist).take(proxy.model.itemsCount).clone());
+            }
             return proxy._removeSelectedValue(queryPromise); 
+        },
+        _localNegDataVirtualScroll: function () {
+            var proxy = this;
+                if(proxy._dataFIndex<0){
+                    var queryPromise = ej.DataManager(proxy._dataSource().dataSource.json).executeLocal(ej.Query().skip(0).take(proxy.model.itemsCount - proxy._dataFIndex).clone());
+                    proxy._dataFIndex = proxy.model.itemsCount + proxy._dataFIndex;
+                    proxy._countEnd = true;
+                } else if(proxy._dataFIndex<proxy.model.itemsCount){
+                    var queryPromise = ej.DataManager(proxy._dataSource().dataSource.json).executeLocal(ej.Query().skip(0).take(proxy._dataFIndex).clone());
+                } else{
+                    var queryPromise = ej.DataManager(proxy._dataSource().dataSource.json).executeLocal(ej.Query().skip(proxy._dataFIndex - proxy.model.itemsCount).take(proxy.model.itemsCount).clone());
+                }
+                return proxy._removeSelectedValue(queryPromise);
         },
         _removeSelectedValue: function (data) { 
             if (!ej.isNullOrUndefined(this.value())) {
@@ -2021,11 +2108,12 @@
             var source = this._dataSource();
             var top = this.scrollerObj.scrollTop(), proxy = this, prevIndex = 0, prevPageLoad, nextIndex = null;
             this._currentPage = Math.round(top / (29 * this.model.itemsCount));
+			var defaultList = ej.DataManager(source.dataSource.json).executeLocal(ej.Query().take(this.model.itemsCount));
 			if(this._virtualPages){
             if (($.inArray(this._currentPage, this._virtualPages.sort(function (a, b) { return a - b; }))) != -1) {
                 if (this._currentPage == 0) {
                     if (($.inArray(this._currentPage + 1, this._virtualPages)) != -1) {
-                        this._virtualCount--;
+						this._virtualCount--;
                         return false;
                     } else {
                         this._currentPage = this._currentPage + 1;
@@ -2085,12 +2173,6 @@
                     });
                 }
             }
-            else if (ej.DataManager && source instanceof ej.DataManager && source.dataSource.offline && (source.dataSource.json && source.dataSource.json.length > 0)) {
-                proxy._appendVirtualList(this._localDataVirtualScroll(), prevIndex, proxy._currentPage, nextIndex, prevPageLoad);
-                window.setTimeout(function () {
-                    proxy._removeLoadingClass();
-                }, 100);
-            }
             else {
                 list = ej.DataManager(proxy._dataSource()).executeLocal(skipQuery);
                 proxy._appendVirtualList(proxy._removeSelectedValue(list), prevIndex, proxy._currentPage, nextIndex, prevPageLoad);
@@ -2111,7 +2193,7 @@
             firstVirtualHeight = prevPageLoad ? ((currentIndex - 1) * items * 29) - (prevIndex * items + items) * 29 : (currentIndex * items * 29) - (prevIndex * items + items) * 29;
             if (firstVirtualHeight != 0) tempUl.append($("<span>").addClass("e-virtual").css({ display: "block", height: firstVirtualHeight }));
             this._mapFields();
-            this._generateLi(list, this.mapFld);
+            this._generateLi(list, this.mapFld, true);
             $(this.dummyUl).attr("page", currentIndex);
             if (prevPageLoad) {
                 $(this.dummyUl).slice(0, items).attr("page", currentIndex - 1);
@@ -2139,11 +2221,11 @@
             this._renderBoxModel();
 		  }
         },
-
-        _generateLi: function (list, mapFld) {
+        _generateLi: function (list, mapFld, checkPositiveScroll) {
             this.mapFld = mapFld;
             this.dummyUl = [];
             if (!list || !list.length || list.length < 1) return false;
+            var negAttr = (this._dataFIndex >= this.model.itemsCount) ? this._dataFIndex - this.model.itemsCount: 0;
             for (var i = 0; i < list.length; i++) {
                 var _did = this._getField(list[i], this.mapFld._id),
                     _dimageUrl = this._getField(list[i], this.mapFld._imageUrl),
@@ -2160,6 +2242,16 @@
                 }
                 else {
                      litag.setAttribute('data-value', _dtext);
+                }
+                if(checkPositiveScroll){
+                if(!ej.isNullOrUndefined(this._dataLIndex)) {
+                    litag.setAttribute('data-index-id',(this._dataLIndex++) + 1);
+                }
+             } else{
+                    if(!ej.isNullOrUndefined(this._dataFIndex)) {
+                        litag.setAttribute('data-index-id',(negAttr++) + 1);
+                        this._dataFIndex--;
+                    }
                 }
                 if (!ej.isNullOrUndefined(_did) && (_did !== "" || _did != 0))
                     litag.setAttribute('id', _did);
@@ -2845,28 +2937,41 @@
         _decode: function (val) {
             return $("<span>").html(val).text();
         },
+
+        _checkOutIndex:function(){
+            return this.ultag.find(`[data-index-id='${this._activeItem<=0?0:this._activeItem + 1}']`);
+        },
         _chooseSelectionType: function () {
-            this.activeItem = this._getActiveItem();
+            this.activeItem = (!ej.isNullOrUndefined(this._dataFIndex) && this._activeItem > this.model.itemsCount) ? this._checkOutIndex():this._getActiveItem();
             this.selectedIndexValue = this._activeItem;
             this._mapFields();
             var regEx = /([^"]*)\&[gl]t;([^"]*)/g;
             if (this._dataSource() != null && (!this._isPlainType(this._dataSource()) || !this._isPlainType(this.popupListItems))) {
-                if(this.model.enableFilterSearch && this.ultag.children()[this._activeItem].textContent == this.activeItem.text() ) 
+                if(this.model.enableFilterSearch && !ej.isNullOrUndefined(this._dataFIndex) && this.ultag.find(`[data-index-id='${this._activeItem+1}']`)[0].textContent == this.activeItem.text()){
+                    if(!regEx.test(this.ultag.find(`[data-index-id='${this._activeItem+1}']`)[0].textContent)) {
+                        this._currentText = this.ultag.find(`[data-index-id='${this._activeItem+1}']`)[0].textContent;
+                     } else {
+                        this._currentText = this._decode(this.ultag.find(`[data-index-id='${this._activeItem+1}']`)[0].textContent);
+                     }
+                }
+                else if(this.model.enableFilterSearch && this.ultag.children()[this._activeItem].textContent == this.activeItem.text()) 
                     if(!regEx.test(this.ultag.children()[this._activeItem].textContent)) {
                        this._currentText = this.ultag.children()[this._activeItem].textContent;
                     } else {
                        this._currentText = this._decode(this.ultag.children()[this._activeItem].textContent);
                     }
-                else
-                    if (!regEx.test(this._getField(this.popupListItems[this._activeItem], this.mapFld._text))) {
+                else if(!ej.isNullOrUndefined(this._dataFIndex) && !regEx.test(this._getField(this.getItemDataByValue(this._activeItem)[0]+1, this.mapFld._text))){
+                    this._currentText = this._getField(this.getItemDataByValue(this._activeItem)[0]+1, this.mapFld._text);
+                }
+                 else if (!regEx.test(this._getField(this.popupListItems[this._activeItem], this.mapFld._text))) {
                         this._currentText = this._getField(this.popupListItems[this._activeItem], this.mapFld._text);
                     } else {
                         this._currentText = this._decode(this._getField(this.popupListItems[this._activeItem], this.mapFld._text));
                     }
                 this._currentText = (this._currentText === "" || this._currentText == null) ? this.activeItem.text() : this._currentText;
-                this._selectedValue = this._getField(this.popupListItems[this._activeItem], this.mapFld._value);
+                this._selectedValue =  this._getField(!ej.isNullOrUndefined(this._dataFIndex)? this.popupListItems[this._activeItem] : this.getItemDataByValue(this._activeItem)[0]+1, this.mapFld._value);
                 this._selectedValue = (this._selectedValue != null) ? this._selectedValue : this._currentText;
-                this._itemID = this._getField(this.popupListItems[this._activeItem], this.mapFld._id);
+                this._itemID = this._getField(!ej.isNullOrUndefined(this._dataFIndex)?this.popupListItems[this._activeItem]:this.getItemDataByValue(this._activeItem)[0]+1, this.mapFld._id);
             } else {
                 this._currentText = this.activeItem.text();
                 if (this._getAttributeValue(this.activeItem[0]))
@@ -3953,7 +4058,8 @@
         _onCheckChange: function (e) {
             this.checkChange = true;
             var curEle = e.target.nodeName === "INPUT" ? e.target.parentElement : e.target;
-            this._activeItem = $.inArray($(curEle).parents("li")[0], this._getLi());
+            var curEleLi = $(curEle).parents("li")[0];
+            this._activeItem = !ej.isNullOrUndefined(curEleLi.getAttribute("data-index-id"))?curEleLi.getAttribute("data-index-id")-1: $.inArray(curEleLi, this._getLi());
             if (!this._hasClass(curEle, "e-check-act")) {
                 this._enterTextBoxValue(true);
             }

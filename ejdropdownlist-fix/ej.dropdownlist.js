@@ -2033,7 +2033,8 @@
                         proxy.addItem(proxy._localDataVirtualScroll());
                                 window.setTimeout(function () {
                                 proxy._removeLoadingClass();
-                                if (ej.isNullOrUndefined(this._dataFIndex)) proxy.activeItem[0].scrollIntoView();
+                                if (!ej.isNullOrUndefined(proxy._isPopOpenedFirst) && proxy._isPopOpenedFirst) proxy.activeItem[0].scrollIntoView();
+                                proxy._isPopOpenedFirst = false;
                             }, 100);
                         } else{
                             proxy._removeLoadingClass();    
@@ -2719,7 +2720,7 @@
 
         _showResult: function () {
             var proxy = this;
-            this.popUpShow = true
+            this._isPopOpenedFirst = this.popUpShow = true;
             if(this.model.loadOnDemand) { 
                 if(ej.isNullOrUndefined(this.popupListWrapper))this._renderPopupPanelWrapper();
                 if(ej.isNullOrUndefined(this.ultag) || this.ultag.children().length==0){
